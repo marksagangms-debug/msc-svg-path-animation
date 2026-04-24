@@ -5,6 +5,7 @@
   var PATH_ATTR_ALT = "dv_path";
   var REVEAL_ATTR = "dv-reveal";
   var READY_FLAG = "dvPathReady";
+  var PATH_CONFIG_FLAG = "dvPathConfig";
   var REVEAL_READY_FLAG = "dvRevealReady";
   var OBSERVER_READY_FLAG = "dvPathObserverReady";
   var GSAP_URL = "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js";
@@ -216,18 +217,62 @@
     path.style.strokeDashoffset = length * progress;
   }
 
+  function getPathConfigKey(options) {
+    return JSON.stringify({
+      drawFrom: options.drawFrom,
+      drawTo: options.drawTo,
+      mode: options.mode,
+      duration: options.duration,
+      repeat: options.repeat,
+      scrub: options.scrub,
+      start: options.start,
+      end: options.end,
+      trigger: options.trigger ? "custom" : "default",
+      rotateGradient: options.rotateGradient,
+      rotateDuration: options.rotateDuration,
+      rotateCenter: options.rotateCenter
+    });
+  }
+
+  function destroyPathAnimation(path) {
+    if (path._dvPathTween) {
+      if (path._dvPathTween.scrollTrigger) {
+        path._dvPathTween.scrollTrigger.kill();
+      }
+      path._dvPathTween.kill();
+      path._dvPathTween = null;
+    }
+
+    if (path._dvPathGradientTween) {
+      path._dvPathGradientTween.kill();
+      path._dvPathGradientTween = null;
+    }
+  }
+
   function initPath(path) {
+    var configKey;
     var length;
     var options;
     var gradient;
     var rotateCenter;
 
-    if (path.dataset[READY_FLAG] === "true" || !path.getTotalLength) {
+    if (!path.getTotalLength) {
       return;
     }
 
-    length = path.getTotalLength();
     options = getPathOptions(path);
+    configKey = getPathConfigKey(options);
+
+    if (
+      path.dataset[READY_FLAG] === "true" &&
+      path.dataset[PATH_CONFIG_FLAG] === configKey
+    ) {
+      return;
+    }
+
+    destroyPathAnimation(path);
+
+    length = path.getTotalLength();
     setPathProgress(path, length, options.drawFrom);
 
     if (options.debug) {
@@ -245,14 +290,14 @@
     }
 
     if (options.mode === "autoplay") {
-      window.gsap.to(path, {
+      path._dvPathTween = window.gsap.to(path, {
         strokeDashoffset: length * options.drawTo,
         duration: options.duration,
         ease: "none",
         repeat: options.repeat
       });
     } else {
-      window.gsap.to(path, {
+      path._dvPathTween = window.gsap.to(path, {
         strokeDashoffset: length * options.drawTo,
         ease: "none",
         scrollTrigger: {
@@ -270,7 +315,7 @@
       rotateCenter = options.rotateCenter ? " " + options.rotateCenter : "";
 
       if (gradient) {
-        window.gsap.to(gradient, {
+        path._dvPathGradientTween = window.gsap.to(gradient, {
           attr: { gradientTransform: "rotate(360" + rotateCenter + ")" },
           duration: options.rotateDuration,
           ease: "none",
@@ -280,6 +325,7 @@
     }
 
     path.dataset[READY_FLAG] = "true";
+    path.dataset[PATH_CONFIG_FLAG] = configKey;
   }
 
   function getRevealOptions(el) {
