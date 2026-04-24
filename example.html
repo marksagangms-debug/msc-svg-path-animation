@@ -131,8 +131,10 @@
 
         <path
           dv-path
-          dv-path-trigger=".msc-page"
-          dv-path-scrub="1.1"
+          dv-path-mode="autoplay"
+          dv-path-duration="5"
+          dv-path-repeat="once"
+          dv-path-debug="true"
           dv-path-gradient="#msc-scroll-gradient"
           dv-path-gradient-center="720 500"
           fill="none"
@@ -170,8 +172,8 @@
           <div>
             <h2>Control the timing.</h2>
             <p>
-              Change the trigger, start, end, scrub, path direction, gradient rotation, or switch to full
-              autoplay with one pass or an infinite loop without editing the JavaScript.
+              This example is set to autoplay once on load so it is easier to verify the non-scroll path mode
+              without any trigger or scrub attributes.
             </p>
           </div>
           <div class="visual"></div>

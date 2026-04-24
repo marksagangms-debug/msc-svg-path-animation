@@ -1,6 +1,7 @@
 (function () {
   "use strict";
 
+  var RUNTIME_KEY = "__dvPathRuntimeActive";
   var PATH_ATTR = "dv-path";
   var PATH_ATTR_ALT = "dv_path";
   var REVEAL_ATTR = "dv-reveal";
@@ -11,6 +12,12 @@
   var GSAP_URL = "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js";
   var SCROLL_TRIGGER_URL =
     "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/ScrollTrigger.min.js";
+
+  if (window[RUNTIME_KEY] === true) {
+    return;
+  }
+
+  window[RUNTIME_KEY] = true;
 
   function loadScript(url) {
     return new Promise(function (resolve, reject) {
@@ -235,6 +242,27 @@
   }
 
   function destroyPathAnimation(path) {
+    if (window.gsap && typeof window.gsap.killTweensOf === "function") {
+      window.gsap.killTweensOf(path);
+    }
+
+    if (
+      window.ScrollTrigger &&
+      typeof window.ScrollTrigger.getAll === "function"
+    ) {
+      window.ScrollTrigger.getAll().forEach(function (trigger) {
+        var targets =
+          trigger.animation &&
+          typeof trigger.animation.targets === "function"
+            ? trigger.animation.targets()
+            : [];
+
+        if (targets.indexOf(path) !== -1) {
+          trigger.kill();
+        }
+      });
+    }
+
     if (path._dvPathTween) {
       if (path._dvPathTween.scrollTrigger) {
         path._dvPathTween.scrollTrigger.kill();
