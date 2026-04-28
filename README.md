@@ -55,6 +55,7 @@ Add a Webstudio HTML Embed near the top of the page. Paste this:
       dv_path
       dv_path_trigger=".msc-page"
       dv_path_scrub="1.1"
+      dv_path_mobile_gradient="false"
       dv_path_gradient="#msc-scroll-gradient"
       dv_path_gradient_center="720 500"
       fill="none"
@@ -129,6 +130,7 @@ Use this as the default:
   dv_path
   dv_path_trigger=".msc-page"
   dv_path_scrub="1.1"
+  dv_path_mobile_gradient="false"
   ...
 ></path>
 ```
@@ -140,6 +142,7 @@ In Webstudio attributes, that means:
 | `dv_path` | `true` |
 | `dv_path_trigger` | `.msc-page` |
 | `dv_path_scrub` | `1.1` |
+| `dv_path_mobile_gradient` | `false` |
 
 For debugging, temporarily add:
 
@@ -160,6 +163,8 @@ For debugging, temporarily add:
 - `dv-path-scrub="1.1"`: dashed alias for `dv_path_scrub`.
 - `dv_path_trigger=".msc-page"`: the wrapper that controls the scroll range.
 - `dv-path-trigger=".msc-page"`: dashed alias for `dv_path_trigger`.
+
+On mobile and touch devices, the script automatically uses direct scroll-linked scrub instead of delayed numeric scrub. This protects native page scrolling while keeping the path draw animation active.
 
 These are built-in defaults, so you usually do not need to add them:
 
@@ -199,6 +204,27 @@ dv_path_gradient_duration="5"
 - `dv_path_gradient`: CSS selector for the gradient to rotate.
 - `dv_path_gradient_center`: SVG rotation center.
 - `dv_path_gradient_duration`: seconds for one full rotation.
+
+Continuous gradient rotation is disabled by default on mobile and touch devices to reduce scroll jank. To force it back on for mobile, add:
+
+```html
+dv_path_mobile_gradient="true"
+```
+
+### Mobile Fallback
+
+The default mobile behavior keeps the path scroll animation active with lighter settings. If a page still feels heavy on mobile, render the path in its final state instead:
+
+```html
+dv_path_mobile="static"
+```
+
+Dashed aliases are also supported:
+
+```html
+dv-path-mobile="static"
+dv-path-mobile-gradient="true"
+```
 
 ## Optional Reveal Animation
 
@@ -250,6 +276,7 @@ Reveal attributes:
 - If the path finishes too early, add class `msc-page` to the wrapper that contains all scroll sections.
 - If the path appears behind the page background, set your section backgrounds to transparent or raise the path layer `z-index`.
 - If Webstudio content loads after the script, run `window.dvPathRefresh()` from custom code.
+- If mobile scrolling feels heavy, use `dv_path_mobile="static"` on the path.
 
 ## Local Demo
 

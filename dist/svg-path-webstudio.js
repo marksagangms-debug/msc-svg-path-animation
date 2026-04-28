@@ -7,9 +7,12 @@
   var READY_FLAG = "dvPathReady";
   var REVEAL_READY_FLAG = "dvRevealReady";
   var OBSERVER_READY_FLAG = "dvPathObserverReady";
+  var REFRESH_READY_FLAG = "dvPathRefreshReady";
+  var MOBILE_QUERY = "(max-width: 767px), (pointer: coarse)";
   var GSAP_URL = "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js";
   var SCROLL_TRIGGER_URL =
     "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/ScrollTrigger.min.js";
+  var refreshSchedule;
 
   function loadScript(url) {
     return new Promise(function (resolve, reject) {
@@ -111,6 +114,20 @@
     return raw === null || raw === "" ? fallback : raw;
   }
 
+  function readBoolean(el, attrs, fallback) {
+    var raw = readAttr(el, attrs);
+
+    if (raw === null) {
+      return fallback;
+    }
+
+    return raw !== "false";
+  }
+
+  function isMobileTouch() {
+    return window.matchMedia && window.matchMedia(MOBILE_QUERY).matches;
+  }
+
   function resolveTarget(el, selector, fallback) {
     if (!selector || selector === "self") {
       return fallback || el;
@@ -134,6 +151,7 @@
 
   function getPathOptions(path) {
     var tokens = parseTokens(readAttr(path, [PATH_ATTR, PATH_ATTR_ALT]));
+    var mobile = isMobileTouch();
     var triggerSelector =
       readAttr(path, ["dv-path-trigger", "dv_path_trigger"]) ||
       tokens.trigger;
@@ -179,6 +197,13 @@
         ["dv-path-gradient-center", "dv_path_gradient_center"],
         ""
       ),
+      mobile: mobile,
+      mobileMode: readString(path, ["dv-path-mobile", "dv_path_mobile"], ""),
+      mobileGradient: readBoolean(
+        path,
+        ["dv-path-mobile-gradient", "dv_path_mobile_gradient"],
+        false
+      ),
       debug: readAttr(path, ["dv-path-debug", "dv_path_debug"]) !== null
     };
   }
@@ -188,11 +213,35 @@
     path.style.strokeDashoffset = length * progress;
   }
 
+  function getPathScrub(options) {
+    return options.mobile ? true : options.scrub;
+  }
+
+  function shouldRotateGradient(options) {
+    if (!options.rotateGradient) {
+      return false;
+    }
+
+    return !options.mobile || options.mobileGradient;
+  }
+
+  function scheduleRefresh(delay) {
+    if (!window.ScrollTrigger) {
+      return;
+    }
+
+    window.clearTimeout(refreshSchedule);
+    refreshSchedule = window.setTimeout(function () {
+      window.ScrollTrigger.refresh();
+    }, typeof delay === "number" ? delay : 80);
+  }
+
   function initPath(path) {
     var length;
     var options;
     var gradient;
     var rotateCenter;
+    var scrub;
 
     if (path.dataset[READY_FLAG] === "true" || !path.getTotalLength) {
       return;
@@ -201,6 +250,13 @@
     length = path.getTotalLength();
     options = getPathOptions(path);
     setPathProgress(path, length, options.drawFrom);
+    scrub = getPathScrub(options);
+
+    if (options.mobile && options.mobileMode === "static") {
+      setPathProgress(path, length, options.drawTo);
+      path.dataset[READY_FLAG] = "true";
+      return;
+    }
 
     if (options.debug) {
       console.info("[dv-path] Initialized", {
@@ -209,7 +265,8 @@
         trigger: options.trigger || "document",
         start: options.start,
         end: options.end,
-        scrub: options.scrub
+        scrub: scrub,
+        mobile: options.mobile
       });
     }
 
@@ -220,12 +277,12 @@
         trigger: options.trigger || undefined,
         start: options.start,
         end: options.end,
-        scrub: options.scrub,
+        scrub: scrub,
         invalidateOnRefresh: true
       }
     });
 
-    if (options.rotateGradient) {
+    if (shouldRotateGradient(options)) {
       gradient = document.querySelector(options.rotateGradient);
       rotateCenter = options.rotateCenter ? " " + options.rotateCenter : "";
 
@@ -322,7 +379,7 @@
         window.gsap.registerPlugin(window.ScrollTrigger);
         paths.forEach(initPath);
         reveals.forEach(initReveal);
-        window.ScrollTrigger.refresh();
+        scheduleRefresh();
       })
       .catch(function (error) {
         console.error("[dv-path] Initialization failed:", error);
@@ -330,11 +387,27 @@
   }
 
   window.dvPathRefresh = function () {
-    if (window.ScrollTrigger) {
-      window.ScrollTrigger.refresh();
-    }
     initAll();
+    scheduleRefresh(0);
   };
+
+  function watchForRefreshEvents() {
+    if (document.documentElement.dataset[REFRESH_READY_FLAG] === "true") {
+      return;
+    }
+
+    document.documentElement.dataset[REFRESH_READY_FLAG] = "true";
+
+    window.addEventListener("load", function () {
+      scheduleRefresh(120);
+    });
+    window.addEventListener("resize", function () {
+      scheduleRefresh(160);
+    });
+    window.addEventListener("orientationchange", function () {
+      scheduleRefresh(220);
+    });
+  }
 
   function watchForLatePaths() {
     if (
@@ -362,7 +435,11 @@
         "dv-path-scrub",
         "dv_path_scrub",
         "dv-path-trigger",
-        "dv_path_trigger"
+        "dv_path_trigger",
+        "dv-path-mobile",
+        "dv_path_mobile",
+        "dv-path-mobile-gradient",
+        "dv_path_mobile_gradient"
       ]
     });
   }
@@ -371,9 +448,11 @@
     document.addEventListener("DOMContentLoaded", function () {
       initAll();
       watchForLatePaths();
+      watchForRefreshEvents();
     });
   } else {
     initAll();
     watchForLatePaths();
+    watchForRefreshEvents();
   }
 })();
