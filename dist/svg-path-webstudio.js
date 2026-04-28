@@ -16,6 +16,7 @@
   var scrollTriggerConfigured = false;
   var lastViewportWidth;
   var lastViewportHeight;
+  var mobilePathDrivers = [];
 
   function loadScript(url) {
     return new Promise(function (resolve, reject) {
@@ -46,7 +47,7 @@
     });
   }
 
-  function ensureGsap() {
+  function ensureGsapCore() {
     var gsapReady = window.gsap
       ? Promise.resolve()
       : loadScript(GSAP_URL).then(function () {
@@ -55,7 +56,11 @@
           }
         });
 
-    return gsapReady.then(function () {
+    return gsapReady;
+  }
+
+  function ensureGsap() {
+    return ensureGsapCore().then(function () {
       if (window.ScrollTrigger) {
         return;
       }
@@ -290,6 +295,195 @@
     return !options.mobile || options.mobileGradient;
   }
 
+  function initGradient(options) {
+    var gradient;
+    var rotateCenter;
+
+    if (!shouldRotateGradient(options) || !window.gsap) {
+      return;
+    }
+
+    gradient = document.querySelector(options.rotateGradient);
+    rotateCenter = options.rotateCenter ? " " + options.rotateCenter : "";
+
+    if (gradient) {
+      window.gsap.to(gradient, {
+        attr: { gradientTransform: "rotate(360" + rotateCenter + ")" },
+        duration: options.rotateDuration,
+        ease: "none",
+        repeat: -1
+      });
+    }
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function getScrollTop() {
+    return (
+      window.pageYOffset ||
+      document.documentElement.scrollTop ||
+      document.body.scrollTop ||
+      0
+    );
+  }
+
+  function getMaxScroll() {
+    var doc = document.documentElement;
+    var body = document.body;
+    var scrollHeight = Math.max(
+      doc.scrollHeight,
+      body ? body.scrollHeight : 0,
+      doc.offsetHeight,
+      body ? body.offsetHeight : 0
+    );
+
+    return Math.max(0, scrollHeight - getViewportSize().height);
+  }
+
+  function getElementTop(el) {
+    return el.getBoundingClientRect().top + getScrollTop();
+  }
+
+  function parseAnchor(raw, size) {
+    var value = String(raw || "top").trim();
+    var number;
+
+    if (value === "top" || value === "left") {
+      return 0;
+    }
+
+    if (value === "center") {
+      return size / 2;
+    }
+
+    if (value === "bottom" || value === "right") {
+      return size;
+    }
+
+    if (value.indexOf("%") > -1) {
+      number = parseFloat(value);
+      return Number.isFinite(number) ? (number / 100) * size : 0;
+    }
+
+    number = parseFloat(value);
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  function resolveScrollPoint(raw, trigger, fallback) {
+    var value = raw;
+    var viewportHeight = getViewportSize().height;
+    var rect;
+    var parts;
+
+    if (typeof value === "number") {
+      return value;
+    }
+
+    if (value === "max") {
+      return getMaxScroll();
+    }
+
+    if (!trigger || typeof value !== "string") {
+      return fallback;
+    }
+
+    parts = value.trim().split(/\s+/);
+    if (!parts.length) {
+      return fallback;
+    }
+
+    rect = trigger.getBoundingClientRect();
+    return (
+      getElementTop(trigger) +
+      parseAnchor(parts[0], rect.height) -
+      parseAnchor(parts[1] || "top", viewportHeight)
+    );
+  }
+
+  function initMobilePathDriver(path, length, options) {
+    var start = 0;
+    var end = 1;
+    var ticking = false;
+    var passive = { passive: true };
+    var driverViewport = getViewportSize();
+
+    function shouldRefreshDriverForResize() {
+      var previousWidth = driverViewport.width;
+      var previousHeight = driverViewport.height;
+      var widthChanged;
+      var heightChanged;
+
+      driverViewport = getViewportSize();
+      widthChanged = driverViewport.width !== previousWidth;
+      heightChanged = driverViewport.height !== previousHeight;
+
+      if (!isMobileTouch()) {
+        return true;
+      }
+
+      return widthChanged || !heightChanged;
+    }
+
+    function refresh() {
+      var trigger = options.trigger || getDefaultTrigger();
+
+      driverViewport = getViewportSize();
+      start = resolveScrollPoint(options.start, trigger, 0);
+      end = resolveScrollPoint(options.end, trigger, getMaxScroll());
+
+      if (end === start) {
+        end = start + 1;
+      }
+
+      update();
+    }
+
+    function update() {
+      var progress = clamp((getScrollTop() - start) / (end - start), 0, 1);
+      var drawProgress =
+        options.drawFrom + (options.drawTo - options.drawFrom) * progress;
+
+      ticking = false;
+      setPathProgress(path, length, drawProgress);
+    }
+
+    function requestUpdate() {
+      if (ticking) {
+        return;
+      }
+
+      ticking = true;
+      window.requestAnimationFrame(update);
+    }
+
+    window.addEventListener("scroll", requestUpdate, passive);
+    window.addEventListener("resize", function () {
+      if (shouldRefreshDriverForResize()) {
+        refresh();
+      }
+    });
+    window.addEventListener("orientationchange", function () {
+      window.setTimeout(refresh, 220);
+    });
+    window.addEventListener("load", function () {
+      window.setTimeout(refresh, 120);
+    });
+
+    mobilePathDrivers.push({
+      refresh: refresh
+    });
+
+    refresh();
+  }
+
+  function refreshMobilePathDrivers() {
+    mobilePathDrivers.forEach(function (driver) {
+      driver.refresh();
+    });
+  }
+
   function scheduleRefresh(delay) {
     if (!window.ScrollTrigger) {
       return;
@@ -304,8 +498,6 @@
   function initPath(path) {
     var length;
     var options;
-    var gradient;
-    var rotateCenter;
     var scrub;
 
     if (path.dataset[READY_FLAG] === "true" || !path.getTotalLength) {
@@ -319,6 +511,13 @@
 
     if (options.mobile && options.mobileMode === "static") {
       setPathProgress(path, length, options.drawTo);
+      path.dataset[READY_FLAG] = "true";
+      return;
+    }
+
+    if (options.mobile && options.mobileMode !== "gsap") {
+      initMobilePathDriver(path, length, options);
+      initGradient(options);
       path.dataset[READY_FLAG] = "true";
       return;
     }
@@ -347,19 +546,7 @@
       }
     });
 
-    if (shouldRotateGradient(options)) {
-      gradient = document.querySelector(options.rotateGradient);
-      rotateCenter = options.rotateCenter ? " " + options.rotateCenter : "";
-
-      if (gradient) {
-        window.gsap.to(gradient, {
-          attr: { gradientTransform: "rotate(360" + rotateCenter + ")" },
-          duration: options.rotateDuration,
-          ease: "none",
-          repeat: -1
-        });
-      }
-    }
+    initGradient(options);
 
     path.dataset[READY_FLAG] = "true";
   }
@@ -377,9 +564,96 @@
     };
   }
 
+  function getRevealRootMargin(start) {
+    var match = String(start || "").match(/top\s+(\d+(?:\.\d+)?)%/);
+    var offset = match ? 100 - Number(match[1]) : 12;
+
+    return "0px 0px -" + clamp(offset, 0, 100) + "% 0px";
+  }
+
+  function initNativeReveal(el) {
+    var options;
+    var targets;
+    var targetList;
+    var observer;
+
+    if (el.dataset[REVEAL_READY_FLAG] === "true") {
+      return;
+    }
+
+    options = getRevealOptions(el);
+    targets = el.children.length && options.stagger > 0 ? el.children : [el];
+    targetList = Array.prototype.slice.call(targets);
+
+    targetList.forEach(function (target, index) {
+      var delay = options.delay + index * options.stagger;
+
+      target.style.opacity = "0";
+      target.style.transform = "translate3d(0, " + options.y + "px, 0)";
+      target.style.transition =
+        "opacity " +
+        options.duration +
+        "s ease " +
+        delay +
+        "s, transform " +
+        options.duration +
+        "s ease " +
+        delay +
+        "s";
+      target.style.willChange = "opacity, transform";
+    });
+
+    function show() {
+      targetList.forEach(function (target) {
+        target.style.opacity = "1";
+        target.style.transform = "translate3d(0, 0, 0)";
+      });
+    }
+
+    function hide() {
+      targetList.forEach(function (target) {
+        target.style.opacity = "0";
+        target.style.transform = "translate3d(0, " + options.y + "px, 0)";
+      });
+    }
+
+    if (!("IntersectionObserver" in window)) {
+      show();
+      el.dataset[REVEAL_READY_FLAG] = "true";
+      return;
+    }
+
+    observer = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            show();
+            if (options.once) {
+              observer.unobserve(el);
+            }
+          } else if (!options.once) {
+            hide();
+          }
+        });
+      },
+      {
+        rootMargin: getRevealRootMargin(options.start),
+        threshold: 0
+      }
+    );
+
+    observer.observe(el);
+    el.dataset[REVEAL_READY_FLAG] = "true";
+  }
+
   function initReveal(el) {
     var options;
     var targets;
+
+    if (isMobileTouch()) {
+      initNativeReveal(el);
+      return;
+    }
 
     if (el.dataset[REVEAL_READY_FLAG] === "true") {
       return;
@@ -419,6 +693,30 @@
     });
   }
 
+  function getRuntimeNeeds(paths, reveals) {
+    var mobile = isMobileTouch();
+    var needsScrollTrigger = !mobile && reveals.length > 0;
+    var needsGsap = needsScrollTrigger;
+
+    paths.forEach(function (path) {
+      var options = getPathOptions(path);
+
+      if (shouldRotateGradient(options)) {
+        needsGsap = true;
+      }
+
+      if (!options.mobile || options.mobileMode === "gsap") {
+        needsGsap = true;
+        needsScrollTrigger = true;
+      }
+    });
+
+    return {
+      gsap: needsGsap,
+      scrollTrigger: needsScrollTrigger
+    };
+  }
+
   function initAll() {
     var paths = Array.prototype.slice.call(
       document.querySelectorAll("[" + PATH_ATTR + "],[" + PATH_ATTR_ALT + "]")
@@ -429,6 +727,8 @@
     var prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
+    var runtimeNeeds;
+    var runtimeReady;
 
     if (!paths.length && !reveals.length) {
       return;
@@ -439,13 +739,29 @@
       return;
     }
 
-    ensureGsap()
+    runtimeNeeds = getRuntimeNeeds(paths, reveals);
+
+    if (!runtimeNeeds.gsap) {
+      paths.forEach(initPath);
+      reveals.forEach(initReveal);
+      return;
+    }
+
+    runtimeReady = runtimeNeeds.scrollTrigger ? ensureGsap() : ensureGsapCore();
+
+    runtimeReady
       .then(function () {
-        window.gsap.registerPlugin(window.ScrollTrigger);
-        configureScrollTrigger();
+        if (runtimeNeeds.scrollTrigger) {
+          window.gsap.registerPlugin(window.ScrollTrigger);
+          configureScrollTrigger();
+        }
+
         paths.forEach(initPath);
         reveals.forEach(initReveal);
-        scheduleRefresh();
+
+        if (runtimeNeeds.scrollTrigger) {
+          scheduleRefresh();
+        }
       })
       .catch(function (error) {
         console.error("[dv-path] Initialization failed:", error);
@@ -454,6 +770,7 @@
 
   window.dvPathRefresh = function () {
     initAll();
+    refreshMobilePathDrivers();
     scheduleRefresh(0);
   };
 

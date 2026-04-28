@@ -164,7 +164,7 @@ For debugging, temporarily add:
 - `dv_path_trigger=".msc-page"`: the wrapper that controls the scroll range.
 - `dv-path-trigger=".msc-page"`: dashed alias for `dv_path_trigger`.
 
-On mobile and touch devices, the script automatically uses direct scroll-linked scrub instead of delayed numeric scrub. It also ignores iOS browser-chrome height changes during scroll, so Safari and Brave can keep native flick momentum while the path draw animation stays active.
+On mobile and touch devices, the path uses a passive native scroll driver instead of ScrollTrigger scrub. Reveal animations use IntersectionObserver on mobile too, so normal mobile setups avoid ScrollTrigger entirely and keep iOS flick momentum in Safari and Brave.
 
 These are built-in defaults, so you usually do not need to add them:
 
@@ -226,6 +226,12 @@ dv-path-mobile="static"
 dv-path-mobile-gradient="true"
 ```
 
+To force the older ScrollTrigger-based mobile path behavior for testing, use:
+
+```html
+dv_path_mobile="gsap"
+```
+
 ## Optional Reveal Animation
 
 You can fade elements up on scroll by adding `dv-reveal`.
@@ -277,6 +283,7 @@ Reveal attributes:
 - If the path appears behind the page background, set your section backgrounds to transparent or raise the path layer `z-index`.
 - If Webstudio content loads after the script, run `window.dvPathRefresh()` from custom code.
 - If mobile scrolling feels heavy on an especially complex page, use `dv_path_mobile="static"` on the path as a fallback.
+- If you need to compare against the older mobile behavior, temporarily use `dv_path_mobile="gsap"`.
 
 ## Local Demo
 
