@@ -164,7 +164,7 @@ For debugging, temporarily add:
 - `dv_path_trigger=".msc-page"`: the wrapper that controls the scroll range.
 - `dv-path-trigger=".msc-page"`: dashed alias for `dv_path_trigger`.
 
-On mobile and touch devices, the script automatically uses direct scroll-linked scrub instead of delayed numeric scrub. This protects native page scrolling while keeping the path draw animation active.
+On mobile and touch devices, the script automatically uses direct scroll-linked scrub instead of delayed numeric scrub. It also ignores iOS browser-chrome height changes during scroll, so Safari and Brave can keep native flick momentum while the path draw animation stays active.
 
 These are built-in defaults, so you usually do not need to add them:
 
@@ -213,7 +213,7 @@ dv_path_mobile_gradient="true"
 
 ### Mobile Fallback
 
-The default mobile behavior keeps the path scroll animation active with lighter settings. If a page still feels heavy on mobile, render the path in its final state instead:
+The default mobile behavior keeps the path scroll animation active with lighter settings. If an especially heavy page still feels slow on mobile, render the path in its final state instead:
 
 ```html
 dv_path_mobile="static"
@@ -276,7 +276,7 @@ Reveal attributes:
 - If the path finishes too early, add class `msc-page` to the wrapper that contains all scroll sections.
 - If the path appears behind the page background, set your section backgrounds to transparent or raise the path layer `z-index`.
 - If Webstudio content loads after the script, run `window.dvPathRefresh()` from custom code.
-- If mobile scrolling feels heavy, use `dv_path_mobile="static"` on the path.
+- If mobile scrolling feels heavy on an especially complex page, use `dv_path_mobile="static"` on the path as a fallback.
 
 ## Local Demo
 

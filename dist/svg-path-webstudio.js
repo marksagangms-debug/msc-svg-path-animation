@@ -13,6 +13,9 @@
   var SCROLL_TRIGGER_URL =
     "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/ScrollTrigger.min.js";
   var refreshSchedule;
+  var scrollTriggerConfigured = false;
+  var lastViewportWidth;
+  var lastViewportHeight;
 
   function loadScript(url) {
     return new Promise(function (resolve, reject) {
@@ -126,6 +129,68 @@
 
   function isMobileTouch() {
     return window.matchMedia && window.matchMedia(MOBILE_QUERY).matches;
+  }
+
+  function getViewportSize() {
+    var viewport = window.visualViewport;
+
+    return {
+      width: Math.round(
+        (viewport && viewport.width) ||
+          window.innerWidth ||
+          document.documentElement.clientWidth ||
+          0
+      ),
+      height: Math.round(
+        (viewport && viewport.height) ||
+          window.innerHeight ||
+          document.documentElement.clientHeight ||
+          0
+      )
+    };
+  }
+
+  function rememberViewportSize() {
+    var size = getViewportSize();
+
+    lastViewportWidth = size.width;
+    lastViewportHeight = size.height;
+
+    return size;
+  }
+
+  function shouldRefreshForResize() {
+    var previousWidth = lastViewportWidth;
+    var previousHeight = lastViewportHeight;
+    var size = rememberViewportSize();
+    var widthChanged = size.width !== previousWidth;
+    var heightChanged = size.height !== previousHeight;
+
+    if (!isMobileTouch()) {
+      return true;
+    }
+
+    if (typeof previousWidth !== "number") {
+      return true;
+    }
+
+    // iOS browser chrome changes viewport height during scroll; refreshing there
+    // interrupts native momentum, so only real width changes should refresh.
+    return widthChanged || !heightChanged;
+  }
+
+  function configureScrollTrigger() {
+    if (scrollTriggerConfigured || !window.ScrollTrigger) {
+      return;
+    }
+
+    if (window.ScrollTrigger.config) {
+      window.ScrollTrigger.config({
+        ignoreMobileResize: true
+      });
+    }
+
+    scrollTriggerConfigured = true;
   }
 
   function resolveTarget(el, selector, fallback) {
@@ -377,6 +442,7 @@
     ensureGsap()
       .then(function () {
         window.gsap.registerPlugin(window.ScrollTrigger);
+        configureScrollTrigger();
         paths.forEach(initPath);
         reveals.forEach(initReveal);
         scheduleRefresh();
@@ -397,14 +463,19 @@
     }
 
     document.documentElement.dataset[REFRESH_READY_FLAG] = "true";
+    rememberViewportSize();
 
     window.addEventListener("load", function () {
+      rememberViewportSize();
       scheduleRefresh(120);
     });
     window.addEventListener("resize", function () {
-      scheduleRefresh(160);
+      if (shouldRefreshForResize()) {
+        scheduleRefresh(160);
+      }
     });
     window.addEventListener("orientationchange", function () {
+      rememberViewportSize();
       scheduleRefresh(220);
     });
   }
